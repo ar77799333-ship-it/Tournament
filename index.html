@@ -1,1 +1,199 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>My Tournament</title>
+<style>
+  body { font-family: system-ui, sans-serif; background:#eef1f7; color:#111633; max-width:600px; margin:0 auto; padding:16px; }
+  h1 { font-size:32px; margin:0 0 16px; }
+  h2 { font-size:22px; margin:24px 0 8px; }
+  input, select { font-size:16px; padding:10px; border:1.5px solid #c5cce0; border-radius:8px; background:white; color:#111633; }
+  button { font-size:16px; padding:10px 16px; background:#2340e0; color:white; border:0; border-radius:8px; }
+  ul { padding:0; list-style:none; }
+  li { background:white; padding:8px 12px; margin-bottom:6px; border-radius:8px; display:flex; justify-content:space-between; align-items:center; }
+  li button { padding:4px 10px; background:#c2261f; }
+  table { width:100%; border-collapse:collapse; background:white; border-radius:8px; overflow:hidden; }
+  th { background:#111633; color:white; font-size:14px; }
+  td, th { padding:10px 6px; text-align:center; }
+  td:nth-child(2) { text-align:left; font-weight:600; }
+  tbody tr { border-top:1px solid #e3e8f6; }
+  tbody tr:nth-child(1) { background:#ffcf33; }
+  .champ { background:#ffcf33; padding:14px; border-radius:8px; font-size:20px; margin-bottom:12px; }
+</style>
+</head>
+<body>
+<h1>My Tournament</h1>
 
+<input id="teamName" placeholder="Team name">
+<select id="teamGroup">
+  <option>A</option><option>B</option><option>C</option><option>D</option>
+</select>
+<button onclick="addTeam()">Add team</button>
+<ul id="teamList"></ul>
+
+<h2>Add match</h2>
+<p>Group:
+  <select id="matchGroup" onchange="showMatchForm()">
+    <option>All</option><option>A</option><option>B</option><option>C</option><option>D</option>
+  </select>
+</p>
+<div id="matchForm"></div>
+<button onclick="saveMatch()">Save match</button>
+
+<h2>Leaderboard</h2>
+<p>Group:
+  <select id="boardGroup" onchange="showBoard()">
+    <option>All</option><option>A</option><option>B</option><option>C</option><option>D</option>
+  </select>
+</p>
+<p>Target points: <input type="number" id="target" value="80" style="width:80px" onchange="saveTarget()"></p>
+<div id="champion"></div>
+<table>
+  <thead><tr><th>#</th><th>Team</th><th>Mat</th><th>Wins</th><th>Kills</th><th>Pts</th></tr></thead>
+  <tbody id="board"></tbody>
+</table>
+
+<script>
+let teams = JSON.parse(localStorage.getItem("teams")) || [];
+let matches = JSON.parse(localStorage.getItem("matches")) || [];
+let groups = JSON.parse(localStorage.getItem("groups")) || {};
+let target = parseInt(localStorage.getItem("target")) || 80;
+const placePoints = [12,9,8,7,6,5,4,3,2,1,0,0];
+document.getElementById("target").value = target;
+
+function getGroup(name) {
+  return groups[name] || "A";
+}
+
+function saveData() {
+  localStorage.setItem("teams", JSON.stringify(teams));
+  localStorage.setItem("matches", JSON.stringify(matches));
+  localStorage.setItem("groups", JSON.stringify(groups));
+}
+
+function saveTarget() {
+  target = parseInt(document.getElementById("target").value) || 80;
+  localStorage.setItem("target", target);
+  showAll();
+}
+
+function addTeam() {
+  const input = document.getElementById("teamName");
+  const name = input.value.trim();
+  if (name === "") { alert("Team name likhun"); return; }
+  teams.push(name);
+  groups[name] = document.getElementById("teamGroup").value;
+  input.value = "";
+  saveData();
+  showAll();
+}
+
+function deleteTeam(index) {
+  delete groups[teams[index]];
+  teams.splice(index, 1);
+  saveData();
+  showAll();
+}
+
+function showTeams() {
+  const list = document.getElementById("teamList");
+  list.innerHTML = "";
+  for (let i = 0; i < teams.length; i++) {
+    list.innerHTML += "<li><span>" + teams[i] + " (Group " + getGroup(teams[i]) + ")</span>" +
+      "<button onclick='deleteTeam(" + i + ")'>X</button></li>";
+  }
+}
+
+function showMatchForm() {
+  const g = document.getElementById("matchGroup").value;
+  const box = document.getElementById("matchForm");
+  box.innerHTML = "";
+  for (let i = 0; i < teams.length; i++) {
+    if (g !== "All" && getGroup(teams[i]) !== g) continue;
+    box.innerHTML += "<p><b>" + teams[i] + "</b><br>" +
+      "Place: <input type='number' id='place" + i + "' style='width:60px'> " +
+      "Kills: <input type='number' id='kills" + i + "' style='width:60px'></p>";
+  }
+}
+
+function saveMatch() {
+  const results = [];
+  for (let i = 0; i < teams.length; i++) {
+    const placeBox = document.getElementById("place" + i);
+    if (!placeBox) continue;
+    const place = parseInt(placeBox.value);
+    const kills = parseInt(document.getElementById("kills" + i).value) || 0;
+    if (place > 0) results.push({ team: teams[i], place: place, kills: kills });
+  }
+  if (results.length === 0) { alert("Kompokkhe ekta team-er place likhun"); return; }
+  matches.push(results);
+  saveData();
+  showAll();
+}
+
+function showBoard() {
+  const g = document.getElementById("boardGroup").value;
+  const table = {};
+  for (let i = 0; i < teams.length; i++) {
+    if (g !== "All" && getGroup(teams[i]) !== g) continue;
+    table[teams[i]] = { name: teams[i], played: 0, wins: 0, kills: 0, points: 0 };
+  }
+  for (let m = 0; m < matches.length; m++) {
+    for (let r = 0; r < matches[m].length; r++) {
+      const res = matches[m][r];
+      const row = table[res.team];
+      if (!row) continue;
+      row.played++;
+      if (res.place === 1) row.wins++;
+      row.kills += res.kills;
+      row.points += (placePoints[res.place - 1] || 0) + res.kills;
+    }
+  }
+  const rows = Object.values(table);
+  rows.sort(function (a, b) { return b.points - a.points || b.wins - a.wins || b.kills - a.kills; });
+  const body = document.getElementById("board");
+  body.innerHTML = "";
+  for (let i = 0; i < rows.length; i++) {
+    const x = rows[i];
+    body.innerHTML += "<tr><td>" + (i + 1) + "</td><td>" + x.name + (x.points >= target ? " ⚡" : "") +
+      "</td><td>" + x.played + "</td><td>" + x.wins + "</td><td>" + x.kills +
+      "</td><td><b>" + x.points + "</b></td></tr>";
+  }
+}
+
+function findChampion() {
+  const running = {};
+  for (let i = 0; i < teams.length; i++) running[teams[i]] = 0;
+  for (let m = 0; m < matches.length; m++) {
+    const match = matches[m];
+    for (let r = 0; r < match.length; r++) {
+      const res = match[r];
+      if (running[res.team] === undefined) continue;
+      if (res.place === 1 && running[res.team] >= target) return { team: res.team, matchNo: m + 1 };
+    }
+    for (let r = 0; r < match.length; r++) {
+      const res = match[r];
+      if (running[res.team] === undefined) continue;
+      running[res.team] += (placePoints[res.place - 1] || 0) + res.kills;
+    }
+  }
+  return null;
+}
+
+function showChampion() {
+  const box = document.getElementById("champion");
+  const c = findChampion();
+  box.innerHTML = c ? "<div class='champ'>🏆 Champion: <b>" + c.team + "</b> (Match " + c.matchNo + ")</div>" : "";
+}
+
+function showAll() {
+  showTeams();
+  showMatchForm();
+  showBoard();
+  showChampion();
+}
+
+showAll();
+</script>
+</body>
+</html>
