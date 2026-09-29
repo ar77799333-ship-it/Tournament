@@ -2,9 +2,11 @@
 <!DOCTYPE html>
 <html>
 <head>
+<meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Live Match</title>
 <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-auth-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-database-compat.js"></script>
 <style>
   body { font-family: system-ui, sans-serif; background:#0d0d12; color:#f2f2f5; max-width:600px; margin:0 auto; padding:16px 16px 60px; }
@@ -15,8 +17,11 @@
   .tabs { display:flex; gap:6px; margin-bottom:16px; flex-wrap:wrap; }
   .tabs button { flex:1; min-width:70px; background:#1a1a22; color:#aaa; font-size:13px; padding:9px 4px; }
   .tabs button.active { background:#ffc44d; color:#1a1400; }
-  .card { background:#1a1a22; border-radius:12px; padding:14px; margin-bottom:12px; border:1px solid #2a2a35; }
+  .card { background:#1a1a22; border-radius:12px; padding:14px; margin-bottom:12px; border:1px solid #2a2a35; position:relative; overflow:hidden; }
   .card h3 { margin:0 0 6px; font-size:18px; }
+  .card .banner { height:70px; border-radius:8px; margin-bottom:10px; display:flex; align-items:center; justify-content:center; font-size:28px; background:linear-gradient(135deg,#2a2a40,#1a1a28); }
+  .card .typebadge { position:absolute; top:12px; right:12px; background:#ffc44d; color:#1a1400; font-size:11px; font-weight:700; padding:3px 10px; border-radius:99px; }
+  .card .datebadge { color:#ffc44d; font-size:12px; font-weight:600; }
   .grid3 { display:grid; grid-template-columns:1fr 1fr 1fr; gap:8px; margin:10px 0; text-align:center; }
   .grid3 div { background:#0d0d12; border-radius:8px; padding:8px 4px; }
   .grid3 small { display:block; color:#888; font-size:11px; }
@@ -25,25 +30,93 @@
   .slotbar div { background:#ffc44d; height:100%; }
   .pending { color:#ffc44d; } .confirmed { color:#4caf50; } .rejected { color:#e05a5a; } .paid { color:#4caf50; }
   .tab { display:none; } .tab.on { display:block; }
+  .full { opacity:0.5; }
+  .rowbtns { display:flex; gap:6px; margin-top:8px; }
+  .rowbtns button { flex:1; }
+  /* ---- login ---- */
+  #authScreen { display:none; padding-top:10px; }
+  #appScreen { display:none; }
+  .langrow { text-align:right; }
+  .langrow button { width:auto; background:#161616; color:#fff; border:1px solid #3a2f1a; border-radius:24px; padding:9px 16px; font-weight:400; }
+  .logo { width:110px; height:110px; margin:22px auto 16px; border-radius:50%; background:radial-gradient(circle,#ffc21a,#e69b00); display:flex; align-items:center; justify-content:center; font-weight:900; font-size:20px; color:#0b1f6b; text-align:center; line-height:1; box-shadow:0 0 60px rgba(255,180,0,.35); }
+  #authScreen h1 { text-align:center; font-size:30px; color:#d4952e; }
+  .sub { text-align:center; color:#9a9a9a; margin:8px 0 22px; }
+  #authScreen label { display:block; margin:10px 0 6px; font-size:14px; }
+  #authScreen input { height:52px; border-radius:14px; border:0; background:#1a1a1a; }
+  .pwrow { position:relative; }
+  .pwrow input { padding-right:48px; }
+  .pwrow span { position:absolute; right:14px; top:14px; font-size:20px; cursor:pointer; }
+  .optrow { display:flex; justify-content:space-between; align-items:center; margin:10px 0 18px; font-size:14px; gap:10px; }
+  .optrow label { margin:0 !important; display:flex; align-items:center; gap:8px; }
+  .optrow input { width:20px; height:20px; margin:0; accent-color:#d4952e; }
+  .optrow a, .switch a { color:#d4952e; text-decoration:none; font-weight:600; }
+  .gold { background:#d4952e !important; color:#fff !important; height:52px; border-radius:14px; font-size:18px; }
+  .switch { text-align:center; color:#9a9a9a; margin:20px 0; }
+  #authMsg { text-align:center; min-height:20px; font-size:14px; margin-top:10px; color:#ff6b6b; }
+  .topbar { display:flex; justify-content:space-between; align-items:center; gap:10px; }
+  .topbar button { width:auto; padding:8px 14px; font-size:13px; background:#1a1a22; color:#ffc44d; border:1px solid #333; }
 </style>
 </head>
 <body>
-<h1>🎮 Live Match</h1>
+
+<!-- ============ LOGIN / SIGN UP ============ -->
+<div id="authScreen">
+  <div class="langrow"><button id="langBtn" onclick="toggleLang()"></button></div>
+  <div class="logo">LIVE<br>MATCH</div>
+  <h1 id="aTitle"></h1>
+  <p class="sub" id="aSub"></p>
+
+  <div id="signupOnly">
+    <label id="lName"></label>
+    <input id="aName" autocomplete="name">
+    <label id="lPhone"></label>
+    <input id="aPhone" type="tel" autocomplete="tel">
+  </div>
+
+  <label id="lEmail"></label>
+  <input id="aEmail" type="email" autocomplete="email">
+
+  <label id="lPass"></label>
+  <div class="pwrow">
+    <input id="aPass" type="password" autocomplete="current-password">
+    <span onclick="togglePw()">👁</span>
+  </div>
+
+  <div class="optrow" id="loginOnly">
+    <label><input type="checkbox" id="aRem" checked><span id="lRem"></span></label>
+    <a href="#" id="lForgot" onclick="forgotPw();return false;"></a>
+  </div>
+
+  <button class="gold" id="aBtn" onclick="doAuth()"></button>
+  <div id="authMsg"></div>
+  <p class="switch"><span id="lSwitchTxt"></span> <a href="#" id="lSwitch" onclick="switchMode();return false;"></a></p>
+</div>
+
+<!-- ============ MAIN APP ============ -->
+<div id="appScreen">
+<div class="topbar">
+  <h1>🎮 Live Match</h1>
+  <button onclick="logout()">Logout</button>
+</div>
+<p id="welcome" style="color:#ffc44d;font-size:14px;margin:0 0 4px;"></p>
 <p id="status" style="color:#888;font-size:13px;">Connecting...</p>
 
 <div class="tabs">
   <button id="tabmatches" class="active" onclick="setTab('matches')">Matches</button>
   <button id="tabstatus" onclick="setTab('status')">My status</button>
   <button id="tabwithdraw" onclick="setTab('withdraw')">Withdraw</button>
-  <button id="tabadmin" onclick="setTab('admin')">Admin</button>
+  <button id="tabprofile" onclick="setTab('profile')">Profile</button>
+  <button id="tabadmin" style="display:none" onclick="setTab('admin')">Admin</button>
 </div>
 
 <div id="view-matches" class="tab on"></div>
 
 <div id="view-status" class="tab">
-  <h2>Check my request</h2>
+  <h2>Amar joined matches</h2>
+  <div id="myMatches"></div>
+  <h2>Onno request ID diye check korun</h2>
   <input id="checkId" placeholder="Request ID">
-  <button onclick="checkStatus()">Check status</button>
+  <button onclick="checkStatus(true)">Check status</button>
   <div id="statusResult"></div>
 </div>
 
@@ -60,11 +133,18 @@
   <div id="withdrawResult"></div>
 </div>
 
+<div id="view-profile" class="tab">
+  <h2>Amar profile</h2>
+  <p style="color:#888;font-size:13px" id="pEmail"></p>
+  <input id="pName" placeholder="Apnar nam">
+  <input id="pPhone" type="tel" placeholder="Phone number">
+  <input id="pFfName" placeholder="Free Fire name">
+  <input id="pFfUid" placeholder="Free Fire UID">
+  <input id="pBkash" placeholder="bKash number (withdraw-er jonno)">
+  <button onclick="saveProfile()">Save profile</button>
+</div>
+
 <div id="view-admin" class="tab">
-  <div id="adminLock">
-    <input type="password" id="adminPass" placeholder="Admin password">
-    <button onclick="unlock()">Unlock</button>
-  </div>
   <div id="adminPanel" style="display:none">
     <h2>Add match</h2>
     <input id="mTitle" placeholder="Match title, e.g. BR Solo #1">
@@ -75,11 +155,14 @@
     <input id="mDate" type="datetime-local">
     <input id="mBkash" placeholder="Your bKash number (Send Money)">
     <button onclick="addMatch()">Create match</button>
+    <h2>All matches (manage)</h2>
+    <div id="adminMatchList"></div>
     <h2>Join requests</h2>
     <div id="adminRequests"></div>
     <h2>Withdraw requests</h2>
     <div id="adminWithdraws"></div>
   </div>
+</div>
 </div>
 
 <script>
@@ -94,63 +177,266 @@ const firebaseConfig = {
 };
 firebase.initializeApp(firebaseConfig);
 const db = firebase.database();
+const auth = firebase.auth();
 const matchesRef = db.ref("liveTour/matches");
 const withdrawsRef = db.ref("liveTour/withdraws");
-const ADMIN_PASSWORD = "azim123"; // nijer password diye bodlan
+let isAdmin = false, profile = {};
+function esc(x) { return String(x == null ? "" : x).replace(/[&<>"']/g, function (c) { return {"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]; }); }
 
 let matches = {};
 let withdraws = {};
+let currentUser = null;
+let listening = false;
 
-matchesRef.on("value", function (snap) {
-  matches = snap.val() || {};
-  document.getElementById("status").textContent = "Live - connected";
-  renderMatches();
-  if (document.getElementById("adminPanel").style.display !== "none") { renderAdminRequests(); renderAdminWithdraws(); }
+/* ================= LOGIN SYSTEM ================= */
+const T = {
+  bn: { loginTitle:"আবার স্বাগতম", loginSub:"আপনার যাত্রা চালিয়ে যেতে সাইন ইন করুন",
+        signupTitle:"অ্যাকাউন্ট খুলুন", signupSub:"নতুন অ্যাকাউন্ট তৈরি করুন",
+        name:"আপনার নাম", phone:"ফোন নম্বর", email:"ইমেইল", pass:"পাসওয়ার্ড",
+        rem:"আমাকে মনে রাখুন", forgot:"পাসওয়ার্ড ভুলে গেছেন?",
+        login:"লগইন →", signup:"সাইন আপ →",
+        noacc:"অ্যাকাউন্ট নেই?", haveacc:"অ্যাকাউন্ট আছে?", goSignup:"সাইন আপ", goLogin:"লগইন",
+        lang:"🌐 English", fill:"সব ঘর পূরণ করুন", wait:"অপেক্ষা করুন...",
+        resetSent:"পাসওয়ার্ড রিসেট লিংক ইমেইলে পাঠানো হয়েছে", needEmail:"আগে ইমেইল লিখুন",
+        e_user:"এই ইমেইলে অ্যাকাউন্ট নেই", e_pass:"ইমেইল বা পাসওয়ার্ড ভুল", e_used:"এই ইমেইলে আগে থেকেই অ্যাকাউন্ট আছে",
+        e_weak:"পাসওয়ার্ড কমপক্ষে ৬ অক্ষরের দিন", e_mail:"ইমেইল ঠিক নেই", e_net:"ইন্টারনেট সমস্যা", e_any:"কিছু একটা সমস্যা হয়েছে" },
+  en: { loginTitle:"Welcome Back", loginSub:"Sign in to continue your journey",
+        signupTitle:"Create Account", signupSub:"Sign up to get started",
+        name:"Your name", phone:"Phone number", email:"Email", pass:"Password",
+        rem:"Remember me", forgot:"Forgot password?",
+        login:"Login →", signup:"Sign up →",
+        noacc:"No account?", haveacc:"Have an account?", goSignup:"Sign up", goLogin:"Login",
+        lang:"🌐 বাংলা", fill:"Please fill all fields", wait:"Please wait...",
+        resetSent:"Password reset link sent to your email", needEmail:"Enter your email first",
+        e_user:"No account with this email", e_pass:"Wrong email or password", e_used:"An account already exists with this email",
+        e_weak:"Password must be at least 6 characters", e_mail:"Invalid email", e_net:"Network problem", e_any:"Something went wrong" }
+};
+let lang = "bn", mode = "login";
+
+function renderAuth() {
+  const t = T[lang], su = mode === "signup";
+  document.getElementById("aTitle").textContent = su ? t.signupTitle : t.loginTitle;
+  document.getElementById("aSub").textContent = su ? t.signupSub : t.loginSub;
+  document.getElementById("lName").textContent = t.name;
+  document.getElementById("lPhone").textContent = t.phone;
+  document.getElementById("lEmail").textContent = t.email;
+  document.getElementById("lPass").textContent = t.pass;
+  document.getElementById("lRem").textContent = t.rem;
+  document.getElementById("lForgot").textContent = t.forgot;
+  document.getElementById("aBtn").textContent = su ? t.signup : t.login;
+  document.getElementById("lSwitchTxt").textContent = su ? t.haveacc : t.noacc;
+  document.getElementById("lSwitch").textContent = su ? t.goLogin : t.goSignup;
+  document.getElementById("langBtn").textContent = t.lang;
+  document.getElementById("signupOnly").style.display = su ? "block" : "none";
+  document.getElementById("loginOnly").style.display = su ? "none" : "flex";
+}
+function toggleLang() { lang = lang === "bn" ? "en" : "bn"; renderAuth(); }
+function switchMode() { mode = mode === "login" ? "signup" : "login"; document.getElementById("authMsg").textContent = ""; renderAuth(); }
+function togglePw() { const p = document.getElementById("aPass"); p.type = p.type === "password" ? "text" : "password"; }
+function authErr(e) {
+  const t = T[lang], c = e.code || "";
+  if (c === "auth/user-not-found") return t.e_user;
+  if (c === "auth/wrong-password" || c === "auth/invalid-credential" || c === "auth/invalid-login-credentials") return t.e_pass;
+  if (c === "auth/email-already-in-use") return t.e_used;
+  if (c === "auth/weak-password") return t.e_weak;
+  if (c === "auth/invalid-email") return t.e_mail;
+  if (c === "auth/network-request-failed") return t.e_net;
+  return t.e_any + " (" + c + ")";
+}
+
+function doAuth() {
+  const t = T[lang], msg = document.getElementById("authMsg");
+  const email = document.getElementById("aEmail").value.trim();
+  const pass = document.getElementById("aPass").value;
+  msg.style.color = "#ff6b6b"; msg.textContent = "";
+  if (!email || !pass) { msg.textContent = t.fill; return; }
+
+  if (mode === "signup") {
+    const name = document.getElementById("aName").value.trim();
+    const phone = document.getElementById("aPhone").value.trim();
+    if (!name || !phone) { msg.textContent = t.fill; return; }
+    msg.style.color = "#888"; msg.textContent = t.wait;
+    auth.createUserWithEmailAndPassword(email, pass).then(function (cred) {
+      db.ref("liveTour/users/" + cred.user.uid).set({ name: name, phone: phone, email: email, time: Date.now() });
+      return cred.user.updateProfile({ displayName: name });
+    }).then(function () {
+      currentUser = auth.currentUser; showApp(currentUser);
+    }).catch(function (e) { msg.style.color = "#ff6b6b"; msg.textContent = authErr(e); });
+  } else {
+    msg.style.color = "#888"; msg.textContent = t.wait;
+    const p = document.getElementById("aRem").checked ? firebase.auth.Auth.Persistence.LOCAL : firebase.auth.Auth.Persistence.SESSION;
+    auth.setPersistence(p).then(function () {
+      return auth.signInWithEmailAndPassword(email, pass);
+    }).catch(function (e) { msg.style.color = "#ff6b6b"; msg.textContent = authErr(e); });
+  }
+}
+
+function forgotPw() {
+  const t = T[lang], msg = document.getElementById("authMsg");
+  const email = document.getElementById("aEmail").value.trim();
+  if (!email) { msg.style.color = "#ff6b6b"; msg.textContent = t.needEmail; return; }
+  auth.sendPasswordResetEmail(email).then(function () {
+    msg.style.color = "#4caf50"; msg.textContent = t.resetSent;
+  }).catch(function (e) { msg.style.color = "#ff6b6b"; msg.textContent = authErr(e); });
+}
+
+function logout() {
+  if (!confirm("Logout korben?")) return;
+  auth.signOut();
+}
+
+auth.onAuthStateChanged(function (user) {
+  if (user) showApp(user); else showAuth();
 });
-withdrawsRef.on("value", function (snap) {
-  withdraws = snap.val() || {};
-  if (document.getElementById("adminPanel").style.display !== "none") renderAdminWithdraws();
-});
+
+function showAuth() {
+  currentUser = null; isAdmin = false; profile = {};
+  if (listening) { matchesRef.off(); withdrawsRef.off(); listening = false; }
+  document.getElementById("appScreen").style.display = "none";
+  document.getElementById("authScreen").style.display = "block";
+  renderAuth();
+}
+
+function showApp(user) {
+  currentUser = user;
+  document.getElementById("authScreen").style.display = "none";
+  document.getElementById("appScreen").style.display = "block";
+  document.getElementById("welcome").textContent = "👋 " + (user.displayName || user.email);
+  db.ref("liveTour/admins/" + user.uid).once("value")
+    .then(function (s) { isAdmin = s.val() === true; }).catch(function () { isAdmin = false; })
+    .then(function () { return db.ref("liveTour/users/" + user.uid).once("value"); })
+    .then(function (s) { profile = s.val() || {}; }).catch(function () { profile = {}; })
+    .then(function () { applyRole(); startApp(); });
+}
+
+function applyRole() {
+  document.getElementById("tabadmin").style.display = isAdmin ? "block" : "none";
+  document.getElementById("adminPanel").style.display = isAdmin ? "block" : "none";
+  fillProfile();
+  document.getElementById("wName").value = profile.name || (currentUser && currentUser.displayName) || "";
+  document.getElementById("wBkash").value = profile.bkash || "";
+}
+
+function fillProfile() {
+  document.getElementById("pEmail").textContent = currentUser ? currentUser.email : "";
+  document.getElementById("pName").value = profile.name || (currentUser && currentUser.displayName) || "";
+  document.getElementById("pPhone").value = profile.phone || "";
+  document.getElementById("pFfName").value = profile.ffName || "";
+  document.getElementById("pFfUid").value = profile.ffUid || "";
+  document.getElementById("pBkash").value = profile.bkash || "";
+}
+
+function saveProfile() {
+  const data = {
+    name: document.getElementById("pName").value.trim(),
+    phone: document.getElementById("pPhone").value.trim(),
+    ffName: document.getElementById("pFfName").value.trim(),
+    ffUid: document.getElementById("pFfUid").value.trim(),
+    bkash: document.getElementById("pBkash").value.trim()
+  };
+  db.ref("liveTour/users/" + currentUser.uid).update(data).then(function () {
+    profile = Object.assign({}, profile, data);
+    alert("Profile save hoyeche");
+  }).catch(function () { alert("Save hoyni, abar chesta korun"); });
+}
+
+/* ================= MAIN APP ================= */
+function startApp() {
+  if (listening) return;
+  listening = true;
+  matchesRef.on("value", function (snap) {
+    matches = snap.val() || {};
+    document.getElementById("status").textContent = "Live - connected";
+    renderMatches();
+    if (document.getElementById("view-status").classList.contains("on")) renderMyMatches();
+    if (isAdmin) { renderAdminMatchList(); renderAdminRequests(); renderAdminWithdraws(); }
+  });
+  if (isAdmin) {
+    withdrawsRef.on("value", function (snap) {
+      withdraws = snap.val() || {};
+      renderAdminWithdraws();
+    });
+  }
+}
 
 function setTab(name) {
-  ["matches","status","withdraw","admin"].forEach(function(t){
+  ["matches","status","withdraw","profile","admin"].forEach(function(t){
     document.getElementById("view-"+t).classList.toggle("on", t===name);
     document.getElementById("tab"+t).classList.toggle("active", t===name);
   });
+  if (name === "status") renderMyMatches();
 }
 
 function uid() { return Math.random().toString(36).slice(2,9); }
+
+function getMyRequests() {
+  try { return JSON.parse(localStorage.getItem("myRequests_" + (currentUser ? currentUser.uid : ""))) || []; } catch (e) { return []; }
+}
+function saveMyRequest(reqId, matchId) {
+  const list = getMyRequests();
+  list.push({ reqId: reqId, matchId: matchId });
+  localStorage.setItem("myRequests_" + (currentUser ? currentUser.uid : ""), JSON.stringify(list));
+}
 
 function renderMatches() {
   const box = document.getElementById("view-matches");
   const ids = Object.keys(matches);
   if (!ids.length) { box.innerHTML = "<p style='color:#888'>Kono match nei ekhon. Aro pore abar check korun.</p>"; return; }
+  const icons = { Solo: "🎯", Duo: "⚔️", Squad: "🔥" };
   box.innerHTML = "";
   ids.forEach(function (id) {
     const m = matches[id];
     const joins = m.joins || {};
-    const confirmed = Object.values(joins).filter(function(j){return j.status==="confirmed";}).length;
+    const confirmed = Object.values(joins).filter(function(j){return j.status==="confirmed"||j.status==="pending";}).length;
     const pct = m.slots ? Math.min(100, Math.round(confirmed*100/m.slots)) : 0;
-    box.innerHTML += "<div class='card'>" +
-      "<h3>"+m.title+" <span style='font-size:13px;color:#888'>("+m.type+")</span></h3>" +
-      "<div style='color:#888;font-size:13px'>"+(m.date? new Date(m.date).toLocaleString() : "")+"</div>" +
+    const isFull = confirmed >= m.slots;
+    box.innerHTML += "<div class='card"+(isFull?" full":"")+"'>" +
+      "<span class='typebadge'>"+m.type+"</span>" +
+      "<div class='banner'>"+(icons[m.type]||"🎮")+"</div>" +
+      "<h3>"+m.title+"</h3>" +
+      "<div class='datebadge'>📅 "+(m.date? new Date(m.date).toLocaleString() : "Date TBA")+"</div>" +
       "<div class='grid3'><div><small>Entry</small><b>"+m.fee+" TK</b></div><div><small>Prize</small><b>"+m.prize+" TK</b></div><div><small>Slot</small><b>"+confirmed+"/"+m.slots+"</b></div></div>" +
       "<div class='slotbar'><div style='width:"+pct+"%'></div></div>" +
-      "<button onclick=\"openJoin('"+id+"')\">Join match</button>" +
+      (isFull
+        ? "<button disabled style='background:#444;color:#999'>Match Full</button>"
+        : "<button onclick=\"openJoin('"+id+"')\">Join match</button>") +
       "</div>";
   });
 }
 
 function openJoin(id) {
   const m = matches[id];
-  const name = prompt("Apnar Free Fire name:"); if (!name) return;
-  const ffid = prompt("Apnar Free Fire UID:"); if (!ffid) return;
-  const phone = prompt("Apnar phone number:"); if (!phone) return;
+  const joins = m.joins || {};
+  const confirmed = Object.values(joins).filter(function(j){return j.status==="confirmed"||j.status==="pending";}).length;
+  if (confirmed >= m.slots) { alert("Dukkhito, ei match-er shob slot bhorti hoye geche."); return; }
+
+  const name = prompt("Apnar Free Fire name:", profile.ffName || ""); if (!name) return;
+  const ffid = prompt("Apnar Free Fire UID:", profile.ffUid || ""); if (!ffid) return;
+  const phone = prompt("Apnar phone number:", profile.phone || ""); if (!phone) return;
   alert("Ei bKash number-e "+m.fee+" TK Send Money korun: "+m.bkash+"\n\nTaka pathanor por, porer box-e Transaction ID likhun.");
   const trx = prompt("bKash Transaction ID:"); if (!trx) return;
   const reqId = uid();
-  db.ref("liveTour/matches/"+id+"/joins/"+reqId).set({ name:name, ffid:ffid, phone:phone, trx:trx, status:"pending", time:Date.now() });
-  alert("Request পাঠানো হয়েছে!\n\nApnar Request ID: "+reqId+"\n\nEta likhe rakhun, 'My status' tab-e check korte parben.");
+  db.ref("liveTour/matches/"+id+"/joins/"+reqId).set({ name:name, ffid:ffid, phone:phone, trx:trx, status:"pending", time:Date.now(), userId: currentUser ? currentUser.uid : "" });
+  saveMyRequest(reqId, id);
+  alert("Request পাঠানো হয়েছে!\n\nApnar status 'My status' tab-e automatic dekhabe.");
+}
+
+function renderMyMatches() {
+  const box = document.getElementById("myMatches");
+  const list = getMyRequests();
+  if (!list.length) { box.innerHTML = "<p style='color:#888'>Apni ekhono kono match-e join korenni.</p>"; return; }
+  let html = "";
+  list.slice().reverse().forEach(function (item) {
+    const m = matches[item.matchId];
+    if (!m || !m.joins || !m.joins[item.reqId]) return;
+    const j = m.joins[item.reqId];
+    html += "<div class='card'><h3>"+m.title+"</h3><p>Status: <b class='"+j.status+"'>"+j.status.toUpperCase()+"</b></p>";
+    if (j.status === "confirmed") html += "<p>Room ID: <b>"+(m.roomId||"Pore dewa hobe")+"</b><br>Password: <b>"+(m.roomPass||"Pore dewa hobe")+"</b></p>";
+    else if (j.status === "pending") html += "<p style='color:#888'>Admin payment check korche.</p>";
+    else html += "<p style='color:#e05a5a'>Request reject hoyeche.</p>";
+    html += "</div>";
+  });
+  box.innerHTML = html || "<p style='color:#888'>Apni ekhono kono match-e join korenni.</p>";
 }
 
 function checkStatus() {
@@ -179,7 +465,7 @@ function submitWithdraw() {
   const note = document.getElementById("wNote").value.trim();
   if (!name || !bkash || !amount) { alert("Nam, bKash number ar amount likhun"); return; }
   const id = uid();
-  withdrawsRef.child(id).set({ name:name, bkash:bkash, amount:amount, note:note, status:"pending", time:Date.now() });
+  withdrawsRef.child(id).set({ name:name, bkash:bkash, amount:amount, note:note, status:"pending", time:Date.now(), userId: currentUser ? currentUser.uid : "" });
   document.getElementById("wName").value=""; document.getElementById("wBkash").value="";
   document.getElementById("wAmount").value=""; document.getElementById("wNote").value="";
   alert("Withdraw request পাঠানো হয়েছে!\n\nApnar Withdraw Request ID: "+id+"\n\nEta likhe rakhun, status check korte lagbe.");
@@ -188,7 +474,9 @@ function submitWithdraw() {
 function checkWithdraw() {
   const wid = document.getElementById("checkWId").value.trim();
   const box = document.getElementById("withdrawResult");
-  const w = withdraws[wid];
+  if (!wid) { box.innerHTML = "Withdraw ID likhun"; return; }
+  withdrawsRef.child(wid).once("value").then(function (snap) {
+  const w = snap.val();
   if (!w) { box.innerHTML = "Ei ID-r kono request pawa jayni."; return; }
   let html = "<div class='card'><p>Amount: <b>"+w.amount+" TK</b></p><p>Status: <b class='"+w.status+"'>"+w.status.toUpperCase()+"</b></p>";
   if (w.status === "paid") html += "<p style='color:#4caf50'>Taka pathano hoyeche apnar bKash-e.</p>";
@@ -196,19 +484,7 @@ function checkWithdraw() {
   else html += "<p style='color:#e05a5a'>Request reject hoyeche.</p>";
   html += "</div>";
   box.innerHTML = html;
-}
-
-function unlock() {
-  if (document.getElementById("adminPass").value === ADMIN_PASSWORD) {
-    document.getElementById("adminLock").style.display = "none";
-    document.getElementById("adminPanel").style.display = "block";
-    sessionStorage.setItem("adminUnlocked","yes");
-    renderAdminRequests(); renderAdminWithdraws();
-  } else alert("Password bhul");
-}
-if (sessionStorage.getItem("adminUnlocked")==="yes") {
-  document.getElementById("adminLock").style.display="none";
-  document.getElementById("adminPanel").style.display="block";
+  }).catch(function () { box.innerHTML = "Ei ID-r kono request pawa jayni."; });
 }
 
 function addMatch() {
@@ -227,6 +503,26 @@ function addMatch() {
   alert("Match toiri hoyeche");
 }
 
+function renderAdminMatchList() {
+  const box = document.getElementById("adminMatchList");
+  const ids = Object.keys(matches);
+  if (!ids.length) { box.innerHTML = "<p style='color:#888'>Kono match nei.</p>"; return; }
+  let html = "";
+  ids.forEach(function (id) {
+    const m = matches[id];
+    const joins = m.joins || {};
+    const confirmed = Object.values(joins).filter(function(j){return j.status==="confirmed";}).length;
+    html += "<div class='card'><h3>"+m.title+"</h3><p style='color:#888;font-size:13px'>"+confirmed+"/"+m.slots+" confirmed</p>" +
+      "<button style='background:#e05a5a;color:#fff' onclick=\"deleteMatch('"+id+"','"+m.title.replace(/'/g,"")+"')\">Delete match</button></div>";
+  });
+  box.innerHTML = html;
+}
+
+function deleteMatch(id, title) {
+  if (!confirm("'"+title+"' match ta delete korte chan? Shob join request-o mouche jabe.")) return;
+  matchesRef.child(id).remove();
+}
+
 function renderAdminRequests() {
   const box = document.getElementById("adminRequests");
   let html = "";
@@ -239,8 +535,8 @@ function renderAdminRequests() {
     pendingIds.forEach(function (jid) {
       const j = joins[jid];
       html += "<div style='border-top:1px solid #2a2a35;padding:8px 0'>" +
-        "<div>"+j.name+" (UID: "+j.ffid+")<br><small style='color:#888'>Phone: "+j.phone+" | Trx: "+j.trx+"</small></div>" +
-        "<div style='display:flex;gap:6px;margin-top:6px'>" +
+        "<div>"+esc(j.name)+" (UID: "+esc(j.ffid)+")<br><small style='color:#888'>Phone: "+esc(j.phone)+" | Trx: "+esc(j.trx)+"</small></div>" +
+        "<div class='rowbtns'>" +
         "<button style='background:#4caf50;color:#fff' onclick=\"decide('"+mid+"','"+jid+"','confirmed')\">Confirm</button>" +
         "<button style='background:#e05a5a;color:#fff' onclick=\"decide('"+mid+"','"+jid+"','rejected')\">Reject</button>" +
         "</div></div>";
@@ -268,8 +564,8 @@ function renderAdminWithdraws() {
   pendingIds.forEach(function (id) {
     const w = withdraws[id];
     html += "<div class='card'>" +
-      "<div>"+w.name+" - <b>"+w.amount+" TK</b><br><small style='color:#888'>bKash: "+w.bkash+(w.note?(" | "+w.note):"")+"</small></div>" +
-      "<div style='display:flex;gap:6px;margin-top:8px'>" +
+      "<div>"+esc(w.name)+" - <b>"+esc(w.amount)+" TK</b><br><small style='color:#888'>bKash: "+esc(w.bkash)+(w.note?(" | "+esc(w.note)):"")+"</small></div>" +
+      "<div class='rowbtns'>" +
       "<button style='background:#4caf50;color:#fff' onclick=\"decideWithdraw('"+id+"','paid')\">Mark paid</button>" +
       "<button style='background:#e05a5a;color:#fff' onclick=\"decideWithdraw('"+id+"','rejected')\">Reject</button>" +
       "</div></div>";
