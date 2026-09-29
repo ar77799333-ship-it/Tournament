@@ -1,199 +1,286 @@
+
 <!DOCTYPE html>
 <html>
 <head>
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>My Tournament</title>
+<title>Live Match</title>
+<script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-database-compat.js"></script>
 <style>
-  body { font-family: system-ui, sans-serif; background:#eef1f7; color:#111633; max-width:600px; margin:0 auto; padding:16px; }
-  h1 { font-size:32px; margin:0 0 16px; }
-  h2 { font-size:22px; margin:24px 0 8px; }
-  input, select { font-size:16px; padding:10px; border:1.5px solid #c5cce0; border-radius:8px; background:white; color:#111633; }
-  button { font-size:16px; padding:10px 16px; background:#2340e0; color:white; border:0; border-radius:8px; }
-  ul { padding:0; list-style:none; }
-  li { background:white; padding:8px 12px; margin-bottom:6px; border-radius:8px; display:flex; justify-content:space-between; align-items:center; }
-  li button { padding:4px 10px; background:#c2261f; }
-  table { width:100%; border-collapse:collapse; background:white; border-radius:8px; overflow:hidden; }
-  th { background:#111633; color:white; font-size:14px; }
-  td, th { padding:10px 6px; text-align:center; }
-  td:nth-child(2) { text-align:left; font-weight:600; }
-  tbody tr { border-top:1px solid #e3e8f6; }
-  tbody tr:nth-child(1) { background:#ffcf33; }
-  .champ { background:#ffcf33; padding:14px; border-radius:8px; font-size:20px; margin-bottom:12px; }
+  body { font-family: system-ui, sans-serif; background:#0d0d12; color:#f2f2f5; max-width:600px; margin:0 auto; padding:16px 16px 60px; }
+  h1 { font-size:28px; margin:0 0 4px; color:#ffc44d; }
+  h2 { font-size:20px; margin:20px 0 10px; }
+  input, select { font-size:16px; padding:10px; border:1.5px solid #333; border-radius:8px; background:#1a1a22; color:#fff; width:100%; box-sizing:border-box; margin-bottom:8px; }
+  button { font-size:15px; padding:11px 16px; background:#ffc44d; color:#1a1400; border:0; border-radius:8px; font-weight:700; width:100%; }
+  .tabs { display:flex; gap:6px; margin-bottom:16px; flex-wrap:wrap; }
+  .tabs button { flex:1; min-width:70px; background:#1a1a22; color:#aaa; font-size:13px; padding:9px 4px; }
+  .tabs button.active { background:#ffc44d; color:#1a1400; }
+  .card { background:#1a1a22; border-radius:12px; padding:14px; margin-bottom:12px; border:1px solid #2a2a35; }
+  .card h3 { margin:0 0 6px; font-size:18px; }
+  .grid3 { display:grid; grid-template-columns:1fr 1fr 1fr; gap:8px; margin:10px 0; text-align:center; }
+  .grid3 div { background:#0d0d12; border-radius:8px; padding:8px 4px; }
+  .grid3 small { display:block; color:#888; font-size:11px; }
+  .grid3 b { font-size:15px; }
+  .slotbar { background:#0d0d12; border-radius:6px; height:8px; overflow:hidden; margin:8px 0; }
+  .slotbar div { background:#ffc44d; height:100%; }
+  .pending { color:#ffc44d; } .confirmed { color:#4caf50; } .rejected { color:#e05a5a; } .paid { color:#4caf50; }
+  .tab { display:none; } .tab.on { display:block; }
 </style>
 </head>
 <body>
-<h1>My Tournament</h1>
+<h1>🎮 Live Match</h1>
+<p id="status" style="color:#888;font-size:13px;">Connecting...</p>
 
-<input id="teamName" placeholder="Team name">
-<select id="teamGroup">
-  <option>A</option><option>B</option><option>C</option><option>D</option>
-</select>
-<button onclick="addTeam()">Add team</button>
-<ul id="teamList"></ul>
+<div class="tabs">
+  <button id="tabmatches" class="active" onclick="setTab('matches')">Matches</button>
+  <button id="tabstatus" onclick="setTab('status')">My status</button>
+  <button id="tabwithdraw" onclick="setTab('withdraw')">Withdraw</button>
+  <button id="tabadmin" onclick="setTab('admin')">Admin</button>
+</div>
 
-<h2>Add match</h2>
-<p>Group:
-  <select id="matchGroup" onchange="showMatchForm()">
-    <option>All</option><option>A</option><option>B</option><option>C</option><option>D</option>
-  </select>
-</p>
-<div id="matchForm"></div>
-<button onclick="saveMatch()">Save match</button>
+<div id="view-matches" class="tab on"></div>
 
-<h2>Leaderboard</h2>
-<p>Group:
-  <select id="boardGroup" onchange="showBoard()">
-    <option>All</option><option>A</option><option>B</option><option>C</option><option>D</option>
-  </select>
-</p>
-<p>Target points: <input type="number" id="target" value="80" style="width:80px" onchange="saveTarget()"></p>
-<div id="champion"></div>
-<table>
-  <thead><tr><th>#</th><th>Team</th><th>Mat</th><th>Wins</th><th>Kills</th><th>Pts</th></tr></thead>
-  <tbody id="board"></tbody>
-</table>
+<div id="view-status" class="tab">
+  <h2>Check my request</h2>
+  <input id="checkId" placeholder="Request ID">
+  <button onclick="checkStatus()">Check status</button>
+  <div id="statusResult"></div>
+</div>
+
+<div id="view-withdraw" class="tab">
+  <h2>Withdraw request</h2>
+  <input id="wName" placeholder="Apnar nam">
+  <input id="wBkash" placeholder="bKash number (taka pathanor jonyo)">
+  <input id="wAmount" type="number" placeholder="Kototaka withdraw korte chan">
+  <input id="wNote" placeholder="Note (kon match-e jitechen, optional)">
+  <button onclick="submitWithdraw()">Submit withdraw request</button>
+  <h2>Check withdraw status</h2>
+  <input id="checkWId" placeholder="Withdraw Request ID">
+  <button onclick="checkWithdraw()">Check status</button>
+  <div id="withdrawResult"></div>
+</div>
+
+<div id="view-admin" class="tab">
+  <div id="adminLock">
+    <input type="password" id="adminPass" placeholder="Admin password">
+    <button onclick="unlock()">Unlock</button>
+  </div>
+  <div id="adminPanel" style="display:none">
+    <h2>Add match</h2>
+    <input id="mTitle" placeholder="Match title, e.g. BR Solo #1">
+    <select id="mType"><option>Solo</option><option>Duo</option><option>Squad</option></select>
+    <input id="mFee" type="number" placeholder="Entry fee (TK)">
+    <input id="mPrize" type="number" placeholder="Prize (TK)">
+    <input id="mSlots" type="number" placeholder="Total slots" value="48">
+    <input id="mDate" type="datetime-local">
+    <input id="mBkash" placeholder="Your bKash number (Send Money)">
+    <button onclick="addMatch()">Create match</button>
+    <h2>Join requests</h2>
+    <div id="adminRequests"></div>
+    <h2>Withdraw requests</h2>
+    <div id="adminWithdraws"></div>
+  </div>
+</div>
 
 <script>
-let teams = JSON.parse(localStorage.getItem("teams")) || [];
-let matches = JSON.parse(localStorage.getItem("matches")) || [];
-let groups = JSON.parse(localStorage.getItem("groups")) || {};
-let target = parseInt(localStorage.getItem("target")) || 80;
-const placePoints = [12,9,8,7,6,5,4,3,2,1,0,0];
-document.getElementById("target").value = target;
+const firebaseConfig = {
+  apiKey: "AIzaSyBrA2_nTsjRKQkE2AToK6NEBIgKlXRtVco",
+  authDomain: "my-tournament-437ea.firebaseapp.com",
+  databaseURL: "https://my-tournament-437ea-default-rtdb.firebaseio.com",
+  projectId: "my-tournament-437ea",
+  storageBucket: "my-tournament-437ea.firebasestorage.app",
+  messagingSenderId: "822052917727",
+  appId: "1:822052917727:web:51e289847d9eb6f115b46a"
+};
+firebase.initializeApp(firebaseConfig);
+const db = firebase.database();
+const matchesRef = db.ref("liveTour/matches");
+const withdrawsRef = db.ref("liveTour/withdraws");
+const ADMIN_PASSWORD = "azim123"; // nijer password diye bodlan
 
-function getGroup(name) {
-  return groups[name] || "A";
+let matches = {};
+let withdraws = {};
+
+matchesRef.on("value", function (snap) {
+  matches = snap.val() || {};
+  document.getElementById("status").textContent = "Live - connected";
+  renderMatches();
+  if (document.getElementById("adminPanel").style.display !== "none") { renderAdminRequests(); renderAdminWithdraws(); }
+});
+withdrawsRef.on("value", function (snap) {
+  withdraws = snap.val() || {};
+  if (document.getElementById("adminPanel").style.display !== "none") renderAdminWithdraws();
+});
+
+function setTab(name) {
+  ["matches","status","withdraw","admin"].forEach(function(t){
+    document.getElementById("view-"+t).classList.toggle("on", t===name);
+    document.getElementById("tab"+t).classList.toggle("active", t===name);
+  });
 }
 
-function saveData() {
-  localStorage.setItem("teams", JSON.stringify(teams));
-  localStorage.setItem("matches", JSON.stringify(matches));
-  localStorage.setItem("groups", JSON.stringify(groups));
-}
+function uid() { return Math.random().toString(36).slice(2,9); }
 
-function saveTarget() {
-  target = parseInt(document.getElementById("target").value) || 80;
-  localStorage.setItem("target", target);
-  showAll();
-}
-
-function addTeam() {
-  const input = document.getElementById("teamName");
-  const name = input.value.trim();
-  if (name === "") { alert("Team name likhun"); return; }
-  teams.push(name);
-  groups[name] = document.getElementById("teamGroup").value;
-  input.value = "";
-  saveData();
-  showAll();
-}
-
-function deleteTeam(index) {
-  delete groups[teams[index]];
-  teams.splice(index, 1);
-  saveData();
-  showAll();
-}
-
-function showTeams() {
-  const list = document.getElementById("teamList");
-  list.innerHTML = "";
-  for (let i = 0; i < teams.length; i++) {
-    list.innerHTML += "<li><span>" + teams[i] + " (Group " + getGroup(teams[i]) + ")</span>" +
-      "<button onclick='deleteTeam(" + i + ")'>X</button></li>";
-  }
-}
-
-function showMatchForm() {
-  const g = document.getElementById("matchGroup").value;
-  const box = document.getElementById("matchForm");
+function renderMatches() {
+  const box = document.getElementById("view-matches");
+  const ids = Object.keys(matches);
+  if (!ids.length) { box.innerHTML = "<p style='color:#888'>Kono match nei ekhon. Aro pore abar check korun.</p>"; return; }
   box.innerHTML = "";
-  for (let i = 0; i < teams.length; i++) {
-    if (g !== "All" && getGroup(teams[i]) !== g) continue;
-    box.innerHTML += "<p><b>" + teams[i] + "</b><br>" +
-      "Place: <input type='number' id='place" + i + "' style='width:60px'> " +
-      "Kills: <input type='number' id='kills" + i + "' style='width:60px'></p>";
-  }
+  ids.forEach(function (id) {
+    const m = matches[id];
+    const joins = m.joins || {};
+    const confirmed = Object.values(joins).filter(function(j){return j.status==="confirmed";}).length;
+    const pct = m.slots ? Math.min(100, Math.round(confirmed*100/m.slots)) : 0;
+    box.innerHTML += "<div class='card'>" +
+      "<h3>"+m.title+" <span style='font-size:13px;color:#888'>("+m.type+")</span></h3>" +
+      "<div style='color:#888;font-size:13px'>"+(m.date? new Date(m.date).toLocaleString() : "")+"</div>" +
+      "<div class='grid3'><div><small>Entry</small><b>"+m.fee+" TK</b></div><div><small>Prize</small><b>"+m.prize+" TK</b></div><div><small>Slot</small><b>"+confirmed+"/"+m.slots+"</b></div></div>" +
+      "<div class='slotbar'><div style='width:"+pct+"%'></div></div>" +
+      "<button onclick=\"openJoin('"+id+"')\">Join match</button>" +
+      "</div>";
+  });
 }
 
-function saveMatch() {
-  const results = [];
-  for (let i = 0; i < teams.length; i++) {
-    const placeBox = document.getElementById("place" + i);
-    if (!placeBox) continue;
-    const place = parseInt(placeBox.value);
-    const kills = parseInt(document.getElementById("kills" + i).value) || 0;
-    if (place > 0) results.push({ team: teams[i], place: place, kills: kills });
-  }
-  if (results.length === 0) { alert("Kompokkhe ekta team-er place likhun"); return; }
-  matches.push(results);
-  saveData();
-  showAll();
+function openJoin(id) {
+  const m = matches[id];
+  const name = prompt("Apnar Free Fire name:"); if (!name) return;
+  const ffid = prompt("Apnar Free Fire UID:"); if (!ffid) return;
+  const phone = prompt("Apnar phone number:"); if (!phone) return;
+  alert("Ei bKash number-e "+m.fee+" TK Send Money korun: "+m.bkash+"\n\nTaka pathanor por, porer box-e Transaction ID likhun.");
+  const trx = prompt("bKash Transaction ID:"); if (!trx) return;
+  const reqId = uid();
+  db.ref("liveTour/matches/"+id+"/joins/"+reqId).set({ name:name, ffid:ffid, phone:phone, trx:trx, status:"pending", time:Date.now() });
+  alert("Request পাঠানো হয়েছে!\n\nApnar Request ID: "+reqId+"\n\nEta likhe rakhun, 'My status' tab-e check korte parben.");
 }
 
-function showBoard() {
-  const g = document.getElementById("boardGroup").value;
-  const table = {};
-  for (let i = 0; i < teams.length; i++) {
-    if (g !== "All" && getGroup(teams[i]) !== g) continue;
-    table[teams[i]] = { name: teams[i], played: 0, wins: 0, kills: 0, points: 0 };
-  }
-  for (let m = 0; m < matches.length; m++) {
-    for (let r = 0; r < matches[m].length; r++) {
-      const res = matches[m][r];
-      const row = table[res.team];
-      if (!row) continue;
-      row.played++;
-      if (res.place === 1) row.wins++;
-      row.kills += res.kills;
-      row.points += (placePoints[res.place - 1] || 0) + res.kills;
-    }
-  }
-  const rows = Object.values(table);
-  rows.sort(function (a, b) { return b.points - a.points || b.wins - a.wins || b.kills - a.kills; });
-  const body = document.getElementById("board");
-  body.innerHTML = "";
-  for (let i = 0; i < rows.length; i++) {
-    const x = rows[i];
-    body.innerHTML += "<tr><td>" + (i + 1) + "</td><td>" + x.name + (x.points >= target ? " ⚡" : "") +
-      "</td><td>" + x.played + "</td><td>" + x.wins + "</td><td>" + x.kills +
-      "</td><td><b>" + x.points + "</b></td></tr>";
-  }
+function checkStatus() {
+  const rid = document.getElementById("checkId").value.trim();
+  const box = document.getElementById("statusResult");
+  if (!rid) { box.innerHTML = "Request ID likhun"; return; }
+  let found = null, matchTitle = "";
+  Object.keys(matches).forEach(function (mid) {
+    const joins = matches[mid].joins || {};
+    if (joins[rid]) { found = joins[rid]; matchTitle = matches[mid].title;
+      found.roomId = matches[mid].roomId; found.roomPass = matches[mid].roomPass; }
+  });
+  if (!found) { box.innerHTML = "<p>Ei ID-r kono request pawa jayni.</p>"; return; }
+  let html = "<div class='card'><h3>"+matchTitle+"</h3><p>Status: <b class='"+found.status+"'>"+found.status.toUpperCase()+"</b></p>";
+  if (found.status === "confirmed") html += "<p>Room ID: <b>"+(found.roomId||"Pore dewa hobe")+"</b><br>Password: <b>"+(found.roomPass||"Pore dewa hobe")+"</b></p>";
+  else if (found.status === "pending") html += "<p style='color:#888'>Admin apnar payment check korche.</p>";
+  else html += "<p style='color:#e05a5a'>Request reject hoyeche.</p>";
+  html += "</div>";
+  box.innerHTML = html;
 }
 
-function findChampion() {
-  const running = {};
-  for (let i = 0; i < teams.length; i++) running[teams[i]] = 0;
-  for (let m = 0; m < matches.length; m++) {
-    const match = matches[m];
-    for (let r = 0; r < match.length; r++) {
-      const res = match[r];
-      if (running[res.team] === undefined) continue;
-      if (res.place === 1 && running[res.team] >= target) return { team: res.team, matchNo: m + 1 };
-    }
-    for (let r = 0; r < match.length; r++) {
-      const res = match[r];
-      if (running[res.team] === undefined) continue;
-      running[res.team] += (placePoints[res.place - 1] || 0) + res.kills;
-    }
+function submitWithdraw() {
+  const name = document.getElementById("wName").value.trim();
+  const bkash = document.getElementById("wBkash").value.trim();
+  const amount = parseInt(document.getElementById("wAmount").value);
+  const note = document.getElementById("wNote").value.trim();
+  if (!name || !bkash || !amount) { alert("Nam, bKash number ar amount likhun"); return; }
+  const id = uid();
+  withdrawsRef.child(id).set({ name:name, bkash:bkash, amount:amount, note:note, status:"pending", time:Date.now() });
+  document.getElementById("wName").value=""; document.getElementById("wBkash").value="";
+  document.getElementById("wAmount").value=""; document.getElementById("wNote").value="";
+  alert("Withdraw request পাঠানো হয়েছে!\n\nApnar Withdraw Request ID: "+id+"\n\nEta likhe rakhun, status check korte lagbe.");
+}
+
+function checkWithdraw() {
+  const wid = document.getElementById("checkWId").value.trim();
+  const box = document.getElementById("withdrawResult");
+  const w = withdraws[wid];
+  if (!w) { box.innerHTML = "Ei ID-r kono request pawa jayni."; return; }
+  let html = "<div class='card'><p>Amount: <b>"+w.amount+" TK</b></p><p>Status: <b class='"+w.status+"'>"+w.status.toUpperCase()+"</b></p>";
+  if (w.status === "paid") html += "<p style='color:#4caf50'>Taka pathano hoyeche apnar bKash-e.</p>";
+  else if (w.status === "pending") html += "<p style='color:#888'>Admin review korche.</p>";
+  else html += "<p style='color:#e05a5a'>Request reject hoyeche.</p>";
+  html += "</div>";
+  box.innerHTML = html;
+}
+
+function unlock() {
+  if (document.getElementById("adminPass").value === ADMIN_PASSWORD) {
+    document.getElementById("adminLock").style.display = "none";
+    document.getElementById("adminPanel").style.display = "block";
+    sessionStorage.setItem("adminUnlocked","yes");
+    renderAdminRequests(); renderAdminWithdraws();
+  } else alert("Password bhul");
+}
+if (sessionStorage.getItem("adminUnlocked")==="yes") {
+  document.getElementById("adminLock").style.display="none";
+  document.getElementById("adminPanel").style.display="block";
+}
+
+function addMatch() {
+  const title=document.getElementById("mTitle").value.trim();
+  const fee=parseInt(document.getElementById("mFee").value);
+  const prize=parseInt(document.getElementById("mPrize").value);
+  const slots=parseInt(document.getElementById("mSlots").value);
+  const bkash=document.getElementById("mBkash").value.trim();
+  const date=document.getElementById("mDate").value;
+  const type=document.getElementById("mType").value;
+  if (!title || !fee || !slots || !bkash) { alert("Shob field purun korun"); return; }
+  const id = uid();
+  matchesRef.child(id).set({ title:title, type:type, fee:fee, prize:prize||0, slots:slots, bkash:bkash, date:date, joins:{} });
+  document.getElementById("mTitle").value=""; document.getElementById("mFee").value="";
+  document.getElementById("mPrize").value=""; document.getElementById("mBkash").value="";
+  alert("Match toiri hoyeche");
+}
+
+function renderAdminRequests() {
+  const box = document.getElementById("adminRequests");
+  let html = "";
+  Object.keys(matches).forEach(function (mid) {
+    const m = matches[mid];
+    const joins = m.joins || {};
+    const pendingIds = Object.keys(joins).filter(function(jid){return joins[jid].status==="pending";});
+    if (!pendingIds.length) return;
+    html += "<div class='card'><h3>"+m.title+"</h3>";
+    pendingIds.forEach(function (jid) {
+      const j = joins[jid];
+      html += "<div style='border-top:1px solid #2a2a35;padding:8px 0'>" +
+        "<div>"+j.name+" (UID: "+j.ffid+")<br><small style='color:#888'>Phone: "+j.phone+" | Trx: "+j.trx+"</small></div>" +
+        "<div style='display:flex;gap:6px;margin-top:6px'>" +
+        "<button style='background:#4caf50;color:#fff' onclick=\"decide('"+mid+"','"+jid+"','confirmed')\">Confirm</button>" +
+        "<button style='background:#e05a5a;color:#fff' onclick=\"decide('"+mid+"','"+jid+"','rejected')\">Reject</button>" +
+        "</div></div>";
+    });
+    html += "</div>";
+  });
+  box.innerHTML = html || "<p style='color:#888'>Kono pending join request nei.</p>";
+}
+
+function decide(mid, jid, status) {
+  if (status === "confirmed") {
+    const roomId = prompt("Room ID din:") || "";
+    const roomPass = prompt("Room Password din:") || "";
+    matchesRef.child(mid).child("roomId").set(roomId);
+    matchesRef.child(mid).child("roomPass").set(roomPass);
   }
-  return null;
+  matchesRef.child(mid).child("joins").child(jid).child("status").set(status);
 }
 
-function showChampion() {
-  const box = document.getElementById("champion");
-  const c = findChampion();
-  box.innerHTML = c ? "<div class='champ'>🏆 Champion: <b>" + c.team + "</b> (Match " + c.matchNo + ")</div>" : "";
+function renderAdminWithdraws() {
+  const box = document.getElementById("adminWithdraws");
+  const pendingIds = Object.keys(withdraws).filter(function(id){return withdraws[id].status==="pending";});
+  if (!pendingIds.length) { box.innerHTML = "<p style='color:#888'>Kono pending withdraw nei.</p>"; return; }
+  let html = "";
+  pendingIds.forEach(function (id) {
+    const w = withdraws[id];
+    html += "<div class='card'>" +
+      "<div>"+w.name+" - <b>"+w.amount+" TK</b><br><small style='color:#888'>bKash: "+w.bkash+(w.note?(" | "+w.note):"")+"</small></div>" +
+      "<div style='display:flex;gap:6px;margin-top:8px'>" +
+      "<button style='background:#4caf50;color:#fff' onclick=\"decideWithdraw('"+id+"','paid')\">Mark paid</button>" +
+      "<button style='background:#e05a5a;color:#fff' onclick=\"decideWithdraw('"+id+"','rejected')\">Reject</button>" +
+      "</div></div>";
+  });
+  box.innerHTML = html;
 }
 
-function showAll() {
-  showTeams();
-  showMatchForm();
-  showBoard();
-  showChampion();
+function decideWithdraw(id, status) {
+  if (status === "paid" && !confirm("Apni ki nishchit je bKash-e taka pathiye diyechen?")) return;
+  withdrawsRef.child(id).child("status").set(status);
 }
-
-showAll();
 </script>
 </body>
 </html>
